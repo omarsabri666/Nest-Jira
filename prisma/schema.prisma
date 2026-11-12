@@ -1,0 +1,188 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoleName {
+  ADMIN
+  USER
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MEMBER
+  VIEWER
+}
+
+enum IssueType {
+  TASK
+  BUG
+  STORY
+}
+
+enum IssueStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum IssuePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Role {
+  id   Int      @id @default(autoincrement())
+  name RoleName @unique
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int @map("role_id")
+  permissionId Int @map("permission_id")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id               Int      @id @default(autoincrement())
+  email            String   @unique
+  password         String
+  name             String
+  isActive         Boolean  @default(true)
+  refreshTokenHash String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  roles          UserRole[]
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  projectMembers ProjectMember[]
+  reportedIssues Issue[]         @relation("IssueReporter")
+  assignedIssues Issue[]         @relation("IssueAssignee")
+  comments       Comment[]
+  notifications  Notification[]
+
+  @@map("users")
+}
+
+model UserRole {
+  userId Int @map("user_id")
+  roleId Int @map("role_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Project {
+  id          Int      @id @default(autoincrement())
+  name        String
+  key         String   @unique
+  description String?
+  ownerId     Int      @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members ProjectMember[]
+  issues  Issue[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  userId    Int               @map("user_id")
+  projectId Int               @map("project_id")
+  role      ProjectMemberRole @default(MEMBER)
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@map("project_members")
+}
+
+model Issue {
+  id                Int           @id @default(autoincrement())
+  title             String
+  description       String?
+  type              IssueType     @default(TASK)
+  status            IssueStatus   @default(TODO)
+  priority          IssuePriority @default(MEDIUM)
+  projectId         Int           @map("project_id")
+  reporterId        Int           @map("reporter_id")
+  assigneeId        Int?          @map("assignee_id")
+  dueDate           DateTime?     @map("due_date")
+  dueReminderSentAt DateTime?     @map("due_reminder_sent_at")
+  labels            String[]
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter User      @relation("IssueReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  assignee User?     @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  comments Comment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([assigneeId])
+  @@map("issues")
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  body      String
+  authorId  Int      @map("author_id")
+  issueId   Int      @map("issue_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  author User  @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  issue  Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@map("comments")
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  type        String
+  recipientId Int      @map("recipient_id")
+  payload     Json
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
